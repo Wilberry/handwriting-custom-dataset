@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pillow
+torch
+torchvision
+numpy
+scikit-learn
+python-multipart
