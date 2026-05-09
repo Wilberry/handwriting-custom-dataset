@@ -2,43 +2,61 @@
 
 ## Overview
 
-A robust handwriting recognition system that enables users to create and integrate custom datasets for improved model accuracy and user experience. This application provides a flexible platform for training and deploying handwriting recognition models tailored to specific use cases.
+A handwriting recognition system that supports custom datasets and now includes a built-in Admin UI (FastAPI + Jinja2 templates).
 
 ## Features
 
-- **Custom Dataset Management**: Upload and manage custom handwriting datasets
-- **Flexible Model Training**: Train recognition models on user-defined datasets
-- **Enhanced Accuracy**: Improve prediction accuracy by using domain-specific training data
-- **RESTful API**: Comprehensive REST API for seamless integration
-- **Student and Sample Management**: Organize datasets by students and samples
-- **Database Persistence**: Reliable data storage and retrieval
+- Custom dataset creation and listing
+- Student creation and listing by dataset
+- Handwriting sample upload per student
+- Handwriting prediction with configurable threshold
+- Admin/Operator web UI at `/admin`
+- Existing REST API endpoints remain available
 
 ## Project Structure
 
 ```
 app/
-├── main.py                 # Application entry point
-├── models.py              # Data models
-├── schemas.py             # Request/response schemas
-├── database.py            # Database configuration
-├── crud.py                # CRUD operations
-├── ml.py                  # Machine learning utilities
-├── ml_engine.py           # ML engine core functionality
+├── main.py
+├── models.py
+├── schemas.py
+├── database.py
+├── crud.py
+├── ml.py
+├── ml_engine.py
+├── static/
+│   └── admin.css
+├── templates/
+│   └── admin.html
 └── routers/
-    ├── datasets.py        # Dataset management endpoints
-    ├── samples.py         # Sample management endpoints
-    └── students.py        # Student management endpoints
-uploads/                    # Directory for uploaded files
+    ├── datasets.py
+    ├── samples.py
+    └── students.py
+uploads/
 ```
 
-## Requirements
-
-Dependencies are listed in `requirements.txt`. Install them using:
+## Setup
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Getting Started
+## Run
 
-Refer to the project files for API endpoints and usage instructions.
+```bash
+uvicorn app.main:app --reload
+```
+
+- API root: `http://127.0.0.1:8000/`
+- Admin UI: `http://127.0.0.1:8000/admin`
+- API docs: `http://127.0.0.1:8000/docs`
+
+## Existing API Endpoints (still available)
+
+- `POST /datasets/`
+- `GET /datasets/`
+- `POST /students/`
+- `GET /students/{dataset_id}`
+- `POST /samples/{student_id}`
+- `POST /predict/`
+- `GET /samples/`
