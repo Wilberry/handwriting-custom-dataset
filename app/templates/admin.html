@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Handwriting Admin UI</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Handwriting Recognition Admin</h1>
+
+    {% if message %}
+      <div class="alert">{{ message }}</div>
+    {% endif %}
+
+    <section class="card">
+      <h2>1) Create dataset</h2>
+      <form method="post" action="/admin/datasets/create">
+        <input type="text" name="name" placeholder="Dataset name" required />
+        <button type="submit">Create Dataset</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>2) List datasets</h2>
+      <ul>
+        {% for dataset in datasets %}
+          <li>#{{ dataset.id }} - {{ dataset.name }}</li>
+        {% else %}
+          <li>No datasets found.</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>3) Add students to a selected dataset</h2>
+      <form method="post" action="/admin/students/create">
+        <input type="text" name="name" placeholder="Student name" required />
+        <select name="dataset_id" required>
+          <option value="">Select dataset</option>
+          {% for dataset in datasets %}
+            <option value="{{ dataset.id }}" {% if selected_dataset_id == dataset.id %}selected{% endif %}>#{{ dataset.id }} - {{ dataset.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Add Student</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>4) List students by dataset</h2>
+      <form method="get" action="/admin">
+        <select name="dataset_id" required>
+          <option value="">Select dataset</option>
+          {% for dataset in datasets %}
+            <option value="{{ dataset.id }}" {% if selected_dataset_id == dataset.id %}selected{% endif %}>#{{ dataset.id }} - {{ dataset.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Load Students</button>
+      </form>
+
+      <ul>
+        {% for student in students %}
+          <li>#{{ student.id }} - {{ student.name }} (dataset {{ student.dataset_id }})</li>
+        {% else %}
+          <li>No students for selected dataset.</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>5) Upload handwriting samples for a student</h2>
+      <form method="post" action="/admin/samples/upload" enctype="multipart/form-data">
+        <select name="student_id" required>
+          <option value="">Select student</option>
+          {% for student in students %}
+            <option value="{{ student.id }}">#{{ student.id }} - {{ student.name }}</option>
+          {% endfor %}
+        </select>
+        <input type="file" name="file" accept="image/*" required />
+        <button type="submit">Upload Sample</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>6) Scan handwriting</h2>
+      <form method="post" action="/admin/predict" enctype="multipart/form-data">
+        <select name="dataset_id" required>
+          <option value="">Select dataset</option>
+          {% for dataset in datasets %}
+            <option value="{{ dataset.id }}" {% if selected_dataset_id == dataset.id %}selected{% endif %}>#{{ dataset.id }} - {{ dataset.name }}</option>
+          {% endfor %}
+        </select>
+        <input type="number" name="threshold" min="0" max="1" step="0.01" value="0.75" required />
+        <input type="file" name="file" accept="image/*" required />
+        <button type="submit">Predict</button>
+      </form>
+
+      {% if prediction %}
+        <div class="prediction {% if prediction.match %}success{% else %}fail{% endif %}">
+          <h3>7) Prediction Result</h3>
+          <p><strong>Match status:</strong> {{ prediction.match }}</p>
+          <p><strong>Predicted student ID:</strong> {{ prediction.predicted_student_id if prediction.predicted_student_id is not none else 'N/A' }}</p>
+          <p><strong>Similarity score:</strong> {{ '%.4f'|format(prediction.similarity_score) if prediction.similarity_score is not none else 'N/A' }}</p>
+          {% if prediction.message %}<p><strong>Message:</strong> {{ prediction.message }}</p>{% endif %}
+        </div>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

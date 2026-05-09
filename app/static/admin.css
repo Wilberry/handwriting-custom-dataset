@@ -1,0 +1,46 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  margin: 0;
+  color: #222;
+}
+.container {
+  max-width: 960px;
+  margin: 30px auto;
+  padding: 0 16px;
+}
+.card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+input, select, button {
+  display: block;
+  margin: 8px 0;
+  padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.alert {
+  background: #fff8c5;
+  border: 1px solid #f0d96a;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 16px;
+}
+.prediction {
+  border-radius: 6px;
+  padding: 10px;
+  margin-top: 10px;
+}
+.prediction.success { background: #e7f8ec; border: 1px solid #79d49d; }
+.prediction.fail { background: #fdeeee; border: 1px solid #f19c9c; }

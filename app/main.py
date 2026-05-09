@@ -1,56 +1,36 @@
-"""
-Handwriting Recognition API - Main Application Module
+"""Main FastAPI application for handwriting recognition and admin UI."""
 
-FastAPI application for handwriting recognition with custom dataset support.
-Provides endpoints for dataset management, student management, sample uploads,
-and handwriting recognition predictions.
+from pathlib import Path
+import shutil
+from uuid import uuid4
 
-Key Features:
-    - Dataset Management: Create and manage custom handwriting datasets
-    - Student Management: Register students and organize samples
-    - Sample Upload: Upload handwriting samples with automatic embedding extraction
-    - Handwriting Recognition: Compare new samples against stored samples using embeddings
-    - Configurable Matching: Adjustable similarity threshold for predictions
-
-Routes:
-    - / : Health check endpoint
-    - /datasets : Dataset management endpoints
-    - /students : Student management endpoints
-    - /samples : Sample upload endpoints
-    - /predict : Handwriting recognition prediction endpoint
-    - /samples : List all stored samples
-"""
-
-from fastapi import FastAPI, UploadFile, File, Depends, Form
-from sqlalchemy.orm import Session
 import numpy as np
-from app.database import engine, SessionLocal
-from app import models
-from app.routers import datasets, students, samples
-from app.ml import extract_embedding, compare_embeddings
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
-# Initialize database tables
+from app import crud, models
+from app.database import SessionLocal, engine
+from app.ml import compare_embeddings, extract_embedding
+from app.routers import datasets, samples, students
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 models.Base.metadata.create_all(bind=engine)
 
-# Create FastAPI application instance
 app = FastAPI(title="Handwriting Recognition Production API")
-
-# Include routers for modular endpoint organization
 app.include_router(datasets.router)
 app.include_router(students.router)
 app.include_router(samples.router)
 
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="app/templates")
+
 
 def get_db():
-    """
-    Database session dependency provider.
-    
-    Provides a SQLAlchemy database session for each request.
-    Ensures proper cleanup by closing the session after the request completes.
-    
-    Yields:
-        Session: SQLAlchemy database session for database operations.
-    """
     db = SessionLocal()
     try:
         yield db
@@ -58,128 +38,142 @@ def get_db():
         db.close()
 
 
-@app.get("/")
-def root():
-    """
-    Health check endpoint.
-    
-    Returns:
-        dict: Simple response indicating API is running.
-    """
-    return {"message": "Production API Running"}
+def save_upload(file: UploadFile) -> Path:
+    suffix = Path(file.filename or "upload.bin").suffix
+    destination = UPLOAD_DIR / f"{uuid4().hex}{suffix}"
+    with destination.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return destination
 
 
-@app.post("/predict/")
-async def predict(
-    dataset_id: int = Form(...),
-    threshold: float = Form(0.75),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    """
-    Predict the student identity from a handwriting sample.
-    
-    Compares a new handwriting sample against all samples in a dataset
-    to identify the most likely student. Uses cosine similarity on embeddings
-    with a configurable threshold for confidence filtering.
-    
-    Args:
-        dataset_id (int): ID of the dataset to search within.
-        threshold (float): Minimum similarity score (0-1) for a confident match.
-                          Default: 0.75. Lower values = more permissive matching.
-        file (UploadFile): The handwriting sample image to recognize.
-        db (Session): Database session dependency, automatically injected by FastAPI.
-    
-    Returns:
-        dict: Prediction result containing:
-            - match (bool): Whether a confident match was found
-            - predicted_student_id (int, optional): ID of matched student if match=True
-            - similarity_score (float): Score of the best match (0-1)
-            - message (str, optional): Additional context message
-    
-    Process:
-        1. Saves uploaded file temporarily
-        2. Extracts embedding from handwriting image
-        3. Retrieves all samples in the specified dataset
-        4. Compares embedding against all stored samples
-        5. Returns best match if score exceeds threshold
-    """
-    # Save uploaded file temporarily
-    file_location = f\"uploads/{file.filename}\"
-    
-    with open(file_location, "wb") as buffer:
-        buffer.write(await file.read())
-    
-    # Extract embedding from the new handwriting sample
+def run_prediction(db: Session, dataset_id: int, threshold: float, file_location: str):
+    dataset = db.query(models.Dataset).filter(models.Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
     new_embedding = extract_embedding(file_location)
-    
-    # Retrieve all handwriting samples in the specified dataset
-    # Uses a join to filter samples by dataset through the student relationship
     samples_list = (
         db.query(models.HandwritingSample)
         .join(models.Student)
         .filter(models.Student.dataset_id == dataset_id)
         .all()
     )
-    
-    # Handle case where dataset has no samples
+
     if not samples_list:
-        return {"message": "No handwriting samples in this dataset"}
-    
-    # Extract embeddings and student IDs from stored samples
-    stored_embeddings = []
-    student_ids = []
-    
-    for sample in samples_list:
-        emb = np.frombuffer(sample.embedding, dtype=np.float32)
-        stored_embeddings.append(emb)
-        student_ids.append(sample.student_id)
-    
-    # Compare new embedding against all stored embeddings
+        return {
+            "match": False,
+            "predicted_student_id": None,
+            "similarity_score": None,
+            "message": "No handwriting samples in this dataset",
+        }
+
+    stored_embeddings = [np.frombuffer(sample.embedding, dtype=np.float32) for sample in samples_list]
+    student_ids = [sample.student_id for sample in samples_list]
+
     similarities = compare_embeddings(new_embedding, stored_embeddings)
-    
-    # Find the best match
-    best_match_index = np.argmax(similarities)
-    best_score = similarities[best_match_index]
-    
-    # Apply threshold for confident matching
+    best_match_index = int(np.argmax(similarities))
+    best_score = float(similarities[best_match_index])
+
     if best_score < threshold:
         return {
             "match": False,
-            "similarity_score": float(best_score),
-            "message": "No confident match found"
+            "predicted_student_id": None,
+            "similarity_score": best_score,
+            "message": "No confident match found",
         }
-    
+
     return {
         "match": True,
         "predicted_student_id": student_ids[best_match_index],
-        "similarity_score": float(best_score)
+        "similarity_score": best_score,
+        "message": None,
     }
+
+
+@app.get("/")
+def root():
+    return {"message": "Production API Running"}
+
+
+@app.get("/admin")
+def admin_page(request: Request, dataset_id: int | None = None, message: str | None = None, db: Session = Depends(get_db)):
+    datasets_list = crud.get_datasets(db)
+    students_list = crud.get_students_by_dataset(db, dataset_id) if dataset_id else []
+    return templates.TemplateResponse(
+        "admin.html",
+        {
+            "request": request,
+            "datasets": datasets_list,
+            "students": students_list,
+            "selected_dataset_id": dataset_id,
+            "message": message,
+            "prediction": None,
+        },
+    )
+
+
+@app.post("/admin/datasets/create")
+def admin_create_dataset(name: str = Form(...), db: Session = Depends(get_db)):
+    crud.create_dataset(db, name)
+    return RedirectResponse(url="/admin?message=Dataset+created", status_code=303)
+
+
+@app.post("/admin/students/create")
+def admin_create_student(name: str = Form(...), dataset_id: int = Form(...), db: Session = Depends(get_db)):
+    dataset = db.query(models.Dataset).filter(models.Dataset.id == dataset_id).first()
+    if not dataset:
+        return RedirectResponse(url="/admin?message=Dataset+not+found", status_code=303)
+
+    crud.create_student(db, name, dataset_id)
+    return RedirectResponse(url=f"/admin?dataset_id={dataset_id}&message=Student+created", status_code=303)
+
+
+@app.post("/admin/samples/upload")
+def admin_upload_sample(student_id: int = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        return RedirectResponse(url="/admin?message=Student+not+found", status_code=303)
+
+    file_path = save_upload(file)
+    embedding = extract_embedding(str(file_path))
+    crud.create_handwriting_sample(db, str(file_path), student_id, embedding.tobytes())
+
+    return RedirectResponse(url=f"/admin?dataset_id={student.dataset_id}&message=Sample+uploaded", status_code=303)
+
+
+@app.post("/admin/predict")
+def admin_predict(
+    request: Request,
+    dataset_id: int = Form(...),
+    threshold: float = Form(0.75),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    file_path = save_upload(file)
+    prediction = run_prediction(db, dataset_id, threshold, str(file_path))
+    datasets_list = crud.get_datasets(db)
+    students_list = crud.get_students_by_dataset(db, dataset_id)
+
+    return templates.TemplateResponse(
+        "admin.html",
+        {
+            "request": request,
+            "datasets": datasets_list,
+            "students": students_list,
+            "selected_dataset_id": dataset_id,
+            "message": None,
+            "prediction": prediction,
+        },
+    )
+
+
+@app.post("/predict/")
+def predict(dataset_id: int = Form(...), threshold: float = Form(0.75), file: UploadFile = File(...), db: Session = Depends(get_db)):
+    file_path = save_upload(file)
+    return run_prediction(db, dataset_id, threshold, str(file_path))
 
 
 @app.get("/samples/")
 def list_samples(db: Session = Depends(get_db)):
-    """
-    Retrieve all handwriting samples in the system.
-    
-    Returns metadata for all uploaded handwriting samples without embedding data.
-    Useful for auditing and sample inventory management.
-    
-    Args:
-        db (Session): Database session dependency, automatically injected by FastAPI.
-    
-    Returns:
-        list[dict]: List of sample metadata containing:
-            - id (int): Unique sample identifier
-            - image_path (str): File path to the stored image
-            - student_id (int): ID of the student who provided the sample
-    """
-    samples = db.query(models.HandwritingSample).all()
-    return [
-        {
-            "id": s.id,
-            "image_path": s.image_path,
-            "student_id": s.student_id
-        }
-        for s in samples
-    ]
+    all_samples = db.query(models.HandwritingSample).all()
+    return [{"id": item.id, "image_path": item.image_path, "student_id": item.student_id} for item in all_samples]
