@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-sqlite:////data/app.db}
+      UPLOAD_DIR: ${UPLOAD_DIR:-/data/uploads}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_PREFIX: ${S3_PREFIX:-handwriting-samples}
+    ports:
+      - "8000:8000"
+    volumes:
+      - handwriting-data:/data
+    restart: unless-stopped
+
+volumes:
+  handwriting-data:
