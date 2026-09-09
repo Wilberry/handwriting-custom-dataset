@@ -3,109 +3,196 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Handwriting Admin UI</title>
+  <meta name="color-scheme" content="light" />
+  <title>InkID Operator Console</title>
   <link rel="stylesheet" href="/static/admin.css" />
 </head>
 <body>
-  <main class="container">
-    <h1>Handwriting Recognition Admin</h1>
+  <a class="skip-link" href="#workspace">Skip to workspace</a>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="/admin" aria-label="InkID dashboard">
+        <span class="brand-mark" aria-hidden="true">I</span>
+        <span>InkID</span>
+      </a>
+      <div class="status"><span class="status-dot"></span>Operator console</div>
+    </div>
+  </header>
+
+  <main class="shell" id="workspace">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Custom-dataset writer identification</p>
+        <h1 id="page-title">Build a trusted handwriting reference set.</h1>
+        <p class="hero-copy">Enroll writers, manage verified samples, and inspect ranked identity matches from one focused workspace.</p>
+      </div>
+      <a class="docs-link" href="/docs">Open API docs <span aria-hidden="true">↗</span></a>
+    </section>
+
+    <section class="metrics" aria-label="System summary">
+      <article class="metric"><span>Datasets</span><strong>{{ stats.datasets }}</strong></article>
+      <article class="metric"><span>Writers</span><strong>{{ stats.students }}</strong></article>
+      <article class="metric"><span>Reference samples</span><strong>{{ stats.samples }}</strong></article>
+    </section>
 
     {% if message %}
-      <div class="alert">{{ message }}</div>
+      <div class="notice" role="status"><span aria-hidden="true">✓</span><p>{{ message }}</p></div>
     {% endif %}
 
-    <section class="card">
-      <h2>1) Create dataset</h2>
-      <form method="post" action="/admin/datasets/create">
-        <input type="text" name="name" placeholder="Dataset name" required />
-        <button type="submit">Create Dataset</button>
-      </form>
-    </section>
+    <div class="dashboard-grid">
+      <aside class="sidebar" aria-label="Dataset navigation">
+        <section class="panel">
+          <div class="panel-heading">
+            <div><span class="step">01</span><h2>Datasets</h2></div>
+            <span class="count">{{ datasets|length }}</span>
+          </div>
+          <form class="stack" method="post" action="/admin/datasets/create">
+            <label for="dataset-name">New dataset name</label>
+            <div class="inline-form">
+              <input id="dataset-name" type="text" name="name" maxlength="120" placeholder="e.g. Final-year cohort" required />
+              <button type="submit">Create</button>
+            </div>
+          </form>
 
-    <section class="card">
-      <h2>2) List datasets</h2>
-      <ul>
-        {% for dataset in datasets %}
-          <li>#{{ dataset.id }} - {{ dataset.name }}</li>
+          <nav class="dataset-list" aria-label="Available datasets">
+            {% for dataset in datasets %}
+              <a class="dataset-item {% if selected_dataset_id == dataset.id %}active{% endif %}" href="/admin?dataset_id={{ dataset.id }}">
+                <span class="dataset-icon" aria-hidden="true">{{ dataset.name[:1]|upper }}</span>
+                <span><strong>{{ dataset.name }}</strong><small>Dataset #{{ dataset.id }}</small></span>
+                <span aria-hidden="true">›</span>
+              </a>
+            {% else %}
+              <div class="empty compact"><p>No datasets yet.</p><small>Create one to begin enrolling writers.</small></div>
+            {% endfor %}
+          </nav>
+        </section>
+      </aside>
+
+      <div class="content-column">
+        {% if selected_dataset %}
+          <section class="panel dataset-header">
+            <div>
+              <p class="eyebrow">Active dataset</p>
+              <h2>{{ selected_dataset.name }}</h2>
+              <p>{{ students|length }} writer{% if students|length != 1 %}s{% endif %} · {{ samples|length }} reference sample{% if samples|length != 1 %}s{% endif %}</p>
+            </div>
+            <details class="danger-menu">
+              <summary>Dataset settings</summary>
+              <div class="danger-popover">
+                <strong>Delete this dataset?</strong>
+                <p>This removes every writer and sample associated with it.</p>
+                <form method="post" action="/admin/datasets/{{ selected_dataset.id }}/delete">
+                  <button class="danger-button" type="submit">Delete permanently</button>
+                </form>
+              </div>
+            </details>
+          </section>
+
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading"><div><span class="step">02</span><h2>Enroll writers</h2></div></div>
+              <form class="stack" method="post" action="/admin/students/create">
+                <input type="hidden" name="dataset_id" value="{{ selected_dataset.id }}" />
+                <label for="student-name">Writer name</label>
+                <input id="student-name" type="text" name="name" maxlength="120" placeholder="Full name or safe identifier" required />
+                <button type="submit">Add writer</button>
+              </form>
+              <div class="writer-list">
+                {% for student in students %}
+                  <article class="writer-row">
+                    <span class="avatar" aria-hidden="true">{{ student.name[:1]|upper }}</span>
+                    <span class="writer-info"><strong>{{ student.name }}</strong><small>{{ student.samples|length }} sample{% if student.samples|length != 1 %}s{% endif %}</small></span>
+                    <details class="row-menu">
+                      <summary aria-label="Actions for {{ student.name }}">•••</summary>
+                      <form method="post" action="/admin/students/{{ student.id }}/delete">
+                        <button class="text-danger" type="submit">Delete writer</button>
+                      </form>
+                    </details>
+                  </article>
+                {% else %}
+                  <div class="empty compact"><p>No writers enrolled.</p><small>Add the first writer above.</small></div>
+                {% endfor %}
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading"><div><span class="step">03</span><h2>Add reference sample</h2></div></div>
+              <form class="stack" method="post" action="/admin/samples/upload" enctype="multipart/form-data">
+                <label for="sample-student">Writer</label>
+                <select id="sample-student" name="student_id" required {% if not students %}disabled{% endif %}>
+                  <option value="">Select a writer</option>
+                  {% for student in students %}<option value="{{ student.id }}">{{ student.name }}</option>{% endfor %}
+                </select>
+                <label class="upload-zone" for="sample-file">
+                  <span class="upload-icon" aria-hidden="true">↑</span>
+                  <strong>Choose a handwriting image</strong>
+                  <small>JPEG, PNG or WebP · maximum 10 MB</small>
+                </label>
+                <input class="file-input" id="sample-file" type="file" name="file" accept="image/jpeg,image/png,image/webp" required {% if not students %}disabled{% endif %} />
+                <button type="submit" {% if not students %}disabled{% endif %}>Process and enroll sample</button>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel prediction-panel">
+            <div class="panel-heading"><div><span class="step">04</span><h2>Identify a writer</h2></div><span class="model-tag">ResNet-50 · cosine similarity</span></div>
+            <div class="prediction-grid">
+              <form class="stack" method="post" action="/admin/predict" enctype="multipart/form-data">
+                <input type="hidden" name="dataset_id" value="{{ selected_dataset.id }}" />
+                <label for="query-file">Unknown handwriting image</label>
+                <input id="query-file" type="file" name="file" accept="image/jpeg,image/png,image/webp" required />
+                <label for="threshold">Acceptance threshold <span class="hint">0.00–1.00</span></label>
+                <input id="threshold" type="number" name="threshold" min="0" max="1" step="0.01" value="0.75" required />
+                <button type="submit" {% if not samples %}disabled{% endif %}>Run identification</button>
+                {% if not samples %}<p class="form-help">Enroll at least one reference sample first.</p>{% endif %}
+              </form>
+
+              <div class="result-card {% if prediction and prediction.match %}match{% elif prediction %}no-match{% endif %}" aria-live="polite">
+                {% if prediction %}
+                  <p class="eyebrow">Prediction result</p>
+                  <div class="result-status"><span class="result-icon" aria-hidden="true">{% if prediction.match %}✓{% else %}!{% endif %}</span><div><strong>{% if prediction.match %}Confident match{% else %}No accepted match{% endif %}</strong><small>{{ prediction.message or 'Writer identified above the selected threshold.' }}</small></div></div>
+                  <div class="primary-result"><span>Best candidate</span><strong>{{ prediction.predicted_student_name or 'Not accepted' }}</strong><small>{% if prediction.similarity_score is not none %}Score {{ '%.4f'|format(prediction.similarity_score) }}{% else %}No compatible samples{% endif %}</small></div>
+                  {% if prediction.top_matches %}
+                    <ol class="ranking">
+                      {% for candidate in prediction.top_matches %}
+                        <li><span><b>#{{ loop.index }}</b>{{ candidate.student_name }}</span><strong>{{ '%.4f'|format(candidate.similarity_score) }}</strong></li>
+                      {% endfor %}
+                    </ol>
+                  {% endif %}
+                {% else %}
+                  <div class="empty result-empty"><span class="scan-icon" aria-hidden="true">⌁</span><p>Results will appear here.</p><small>Upload an unknown sample to compare it with enrolled writers.</small></div>
+                {% endif %}
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading"><div><span class="step">05</span><h2>Reference inventory</h2></div><span class="count">{{ samples|length }}</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Sample</th><th>Writer</th><th>Embedding</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                  {% for sample in samples %}
+                    <tr><td>#{{ sample.id }}</td><td>{{ sample.student.name }}</td><td><span class="model-tag">{{ sample.embedding_dimension }} dimensions</span></td><td><form method="post" action="/admin/samples/{{ sample.id }}/delete"><button class="text-danger" type="submit">Delete</button></form></td></tr>
+                  {% else %}
+                    <tr><td colspan="4"><div class="empty compact"><p>No samples enrolled.</p></div></td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
         {% else %}
-          <li>No datasets found.</li>
-        {% endfor %}
-      </ul>
-    </section>
-
-    <section class="card">
-      <h2>3) Add students to a selected dataset</h2>
-      <form method="post" action="/admin/students/create">
-        <input type="text" name="name" placeholder="Student name" required />
-        <select name="dataset_id" required>
-          <option value="">Select dataset</option>
-          {% for dataset in datasets %}
-            <option value="{{ dataset.id }}" {% if selected_dataset_id == dataset.id %}selected{% endif %}>#{{ dataset.id }} - {{ dataset.name }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit">Add Student</button>
-      </form>
-    </section>
-
-    <section class="card">
-      <h2>4) List students by dataset</h2>
-      <form method="get" action="/admin">
-        <select name="dataset_id" required>
-          <option value="">Select dataset</option>
-          {% for dataset in datasets %}
-            <option value="{{ dataset.id }}" {% if selected_dataset_id == dataset.id %}selected{% endif %}>#{{ dataset.id }} - {{ dataset.name }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit">Load Students</button>
-      </form>
-
-      <ul>
-        {% for student in students %}
-          <li>#{{ student.id }} - {{ student.name }} (dataset {{ student.dataset_id }})</li>
-        {% else %}
-          <li>No students for selected dataset.</li>
-        {% endfor %}
-      </ul>
-    </section>
-
-    <section class="card">
-      <h2>5) Upload handwriting samples for a student</h2>
-      <form method="post" action="/admin/samples/upload" enctype="multipart/form-data">
-        <select name="student_id" required>
-          <option value="">Select student</option>
-          {% for student in students %}
-            <option value="{{ student.id }}">#{{ student.id }} - {{ student.name }}</option>
-          {% endfor %}
-        </select>
-        <input type="file" name="file" accept="image/*" required />
-        <button type="submit">Upload Sample</button>
-      </form>
-    </section>
-
-    <section class="card">
-      <h2>6) Scan handwriting</h2>
-      <form method="post" action="/admin/predict" enctype="multipart/form-data">
-        <select name="dataset_id" required>
-          <option value="">Select dataset</option>
-          {% for dataset in datasets %}
-            <option value="{{ dataset.id }}" {% if selected_dataset_id == dataset.id %}selected{% endif %}>#{{ dataset.id }} - {{ dataset.name }}</option>
-          {% endfor %}
-        </select>
-        <input type="number" name="threshold" min="0" max="1" step="0.01" value="0.75" required />
-        <input type="file" name="file" accept="image/*" required />
-        <button type="submit">Predict</button>
-      </form>
-
-      {% if prediction %}
-        <div class="prediction {% if prediction.match %}success{% else %}fail{% endif %}">
-          <h3>7) Prediction Result</h3>
-          <p><strong>Match status:</strong> {{ prediction.match }}</p>
-          <p><strong>Predicted student ID:</strong> {{ prediction.predicted_student_id if prediction.predicted_student_id is not none else 'N/A' }}</p>
-          <p><strong>Similarity score:</strong> {{ '%.4f'|format(prediction.similarity_score) if prediction.similarity_score is not none else 'N/A' }}</p>
-          {% if prediction.message %}<p><strong>Message:</strong> {{ prediction.message }}</p>{% endif %}
-        </div>
-      {% endif %}
-    </section>
+          <section class="panel welcome-empty">
+            <span class="welcome-mark" aria-hidden="true">I</span>
+            <p class="eyebrow">Workspace ready</p>
+            <h2>Create or select a dataset to begin.</h2>
+            <p>A dataset keeps one cohort of writers and their reference samples isolated from every other identification task.</p>
+          </section>
+        {% endif %}
+      </div>
+    </div>
   </main>
+
+  <footer><div class="shell"><span>InkID operator console</span><span>Writer identification · not text transcription</span></div></footer>
 </body>
 </html>

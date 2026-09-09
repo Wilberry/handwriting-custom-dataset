@@ -1,11 +1,4 @@
-fastapi
-uvicorn
-sqlalchemy
-pydantic
-pillow
-torch
-torchvision
-numpy
-scikit-learn
-python-multipart
-jinja2
+-r requirements-core.txt
+
+torch>=2.2,<3
+torchvision>=0.17,<1
