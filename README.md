@@ -4,6 +4,18 @@ A FastAPI portfolio project for enrolling handwriting samples and identifying th
 
 > InkID performs **writer identification**, not handwritten-text transcription (OCR). Uploaded samples form a reference collection; they do not fine-tune or retrain ResNet-50.
 
+## Project status
+
+The repository implements a complete portfolio-grade writer-identification workflow. It is not automatically approved for use with real personal data: production deployment requires representative model evidence, approved data governance, provisioned infrastructure, and recorded acceptance checks.
+
+| Area | Repository status | Production dependency |
+|---|---|---|
+| Application workflow | Implemented and locally tested | Synthetic end-to-end deployment check |
+| Database and storage | SQLite/local plus PostgreSQL/S3 adapters | Managed services, credentials, backup/restore evidence |
+| Security and operations | Baseline controls and runbooks implemented | TLS, secret manager, monitoring, rate limits, incident ownership |
+| ML evaluation | Leave-one-out tool implemented | Representative writer-disjoint data and approved threshold |
+| Privacy | Data minimization/deletion controls documented | Consent/lawful basis, retention, access, and deletion policy |
+
 ## Implemented
 
 - Dataset, writer, and sample CRUD with database constraints and Alembic migrations
@@ -31,6 +43,19 @@ flowchart TD
 ```
 
 The first ML operation downloads standard Torchvision ResNet-50 weights when they are not cached. Every response includes an `X-Request-ID`, MIME-sniffing and frame protections, and a strict referrer policy. Operator pages also receive a Content Security Policy. Request logs omit query strings and credentials.
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Architecture](docs/architecture.md)
+- [API guide](docs/api.md)
+- [Deployment guide](docs/deployment.md)
+- [Operations runbook](docs/operations.md)
+- [Security and privacy](docs/security-privacy.md)
+- [Model card and evaluation protocol](docs/model-card.md)
+- [Testing guide](docs/testing.md)
+- [Production acceptance checklist](docs/production-checklist.md)
+- [Contributing](CONTRIBUTING.md) and [changelog](CHANGELOG.md)
 
 ## Local setup
 
